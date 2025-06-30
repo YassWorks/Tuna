@@ -1,6 +1,6 @@
 from datasets import load_dataset
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
-from peft import get_peft_model, LoraConfig, TaskType, PeftModel
+from peft import get_peft_model, LoraConfig, TaskType
 from helpers.utils import TextGenerator
 import torch
 
@@ -12,7 +12,8 @@ tokenizer = text_gen.tokenizer
 model = text_gen.model
 
 # Load better dataset for PEFT
-dataset = load_dataset("timdettmers/openassistant-guanaco", split="train[:1%]")
+dataset = load_dataset("gsm8k", "main", split="test")
+dataset = dataset.select(range(10))
 
 # Preprocess function
 def preprocess(example):
@@ -65,20 +66,15 @@ trainer = Trainer(
 
 trainer.train()
 
-# Save only LoRA adapter
-new_model.save_pretrained(OUTPUT_DIR)
-tokenizer.save_pretrained(OUTPUT_DIR)
+# Merge LoRA weights into base model
+print("#"*50)
+print(model)
+print("#"*50)
+merged_model = new_model.merge_and_unload()
+print("#"*50)
+print(merged_model)
+print("#"*50)
 
-from transformers import AutoModelForCausalLM
-
-# Reload base model
-base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
-
-# Load adapter into base model
-merged_model = PeftModel.from_pretrained(base_model, OUTPUT_DIR)
-
-# Merge LoRA weights into base weights (no longer PEFT-dependent)
-merged_model = merged_model.merge_and_unload()
-
-# Save as full model (merged LoRA + base) in safetensors format
-merged_model.save_pretrained(f"{OUTPUT_DIR}_merged", safe_serialization=True)
+# Save the merged model and tokenizer
+merged_model.save_pretrained(f"{OUTPUT_DIR}_merged")
+tokenizer.save_pretrained(f"{OUTPUT_DIR}_merged")
