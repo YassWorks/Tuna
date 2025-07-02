@@ -21,7 +21,7 @@ class DataSet:
             raise ValueError(f"Failed to load dataset '{self.name}' with split '{self.split}': {e}")
 
 
-class TextGenerator:
+class Model:
     """
     Wrapper for Hugging Face's AutoModelForCausalLM and AutoTokenizer.
     """

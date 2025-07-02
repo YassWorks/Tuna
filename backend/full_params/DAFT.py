@@ -1,4 +1,4 @@
-from backend.tools.helpers.utils import TextGenerator, DataSet, random_hash
+from backend.tools.helpers.utils import Model, DataSet, random_hash
 from backend.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
 from transformers import TrainingArguments
 from datasets import Dataset as HFDataset
@@ -6,7 +6,6 @@ from typing import Any
 import logging
 import torch
 import os
-
 
 
 class DAFTTrainer(BaseTrainer):
@@ -18,7 +17,7 @@ class DAFTTrainer(BaseTrainer):
     
     def __init__(
         self,
-        text_gen: TextGenerator = None,
+        text_gen: Model = None,
         model_name: str = None,
         dataset: DataSet | HFDataset | Any = None,
         dataset_name: str = None,
@@ -38,11 +37,11 @@ class DAFTTrainer(BaseTrainer):
         """
         
         super().__init__(
-            text_gen=text_gen,
+            model=text_gen,
             model_name=model_name,
-            dataset=dataset,
-            dataset_name=dataset_name,
-            dataset_split_name=dataset_split_name,
+            train_dataset=dataset,
+            train_dataset_name=dataset_name,
+            train_dataset_split_name=dataset_split_name,
             logger=logger
         )
 
@@ -50,13 +49,12 @@ class DAFTTrainer(BaseTrainer):
     def fine_tune(self, training_args: dict, save_to_disk: bool = False, output_dir: str = None, limit: int = None, inplace: bool = False):
         """
         Fine-tunes the model using the provided dataset. (Domain-Adaptive Fine-Tuning **DAFT** approach)
-        #### Note:
-        This method will change the model's parameters **inplace**.
         Args:
             training_args (dict): A dictionary containing training arguments such as batch size, learning rate, etc.
             save_to_disk (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
             limit (int, optional): Limit the number of training samples. Defaults to None.
+            inplace (bool): If True, modifies the current instance in place. If False, returns a new instance. Defaults to False.
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training.
             - `num_train_epochs`: Number of epochs to train the model.
@@ -70,7 +68,7 @@ class DAFTTrainer(BaseTrainer):
                 
                 if output_dir is None:
                     _hash = random_hash()
-                    output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/session_{_hash}"
+                    output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/daft_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(f"Saving training outputs to disk at {output_dir}")
@@ -90,7 +88,7 @@ class DAFTTrainer(BaseTrainer):
             else:
                 
                 args = TrainingArguments(
-                    output_dir=output_dir,  # required but won't get used
+                    output_dir=DEFAULT_OUTPUT_DIR, # required but won't get used
                     per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
                     save_strategy="no",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
@@ -105,15 +103,13 @@ class DAFTTrainer(BaseTrainer):
                 self.logger.info("TrainingArguments configured.")
             
         except Exception as e:
-            raise ValueError(f"Failed to configure training arguments: {str(e)}")
+            err_msg = f"Failed to configure training arguments: {str(e)}"
+            if self.logger is not None:
+                self.logger.error(err_msg)
+            raise ValueError(err_msg)
         
-        tokenized_train = self.tokenize_dataset(self.dataset, limit)
-        
-        if inplace:
-            return super().start_fine_tune(
-                tokenized_train=tokenized_train,
-                training_args=args,
-                inplace=inplace
-            )
-        else:
-            return None
+        return self.start_fine_tune(
+            training_args=args,
+            inplace=inplace,
+            limit_train=limit,
+        )
