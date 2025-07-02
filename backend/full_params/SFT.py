@@ -1,12 +1,10 @@
-from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
-from tools.helpers.utils import Model, DataSet, random_hash
-from peft import LoraConfig, get_peft_model, TaskType
+from backend.tools.helpers.utils import Model, DataSet, random_hash
+from backend.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
+from transformers import TrainingArguments
 from datasets import Dataset as HFDataset
-from tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
 from typing import Any
 import logging
 import torch
-import time
 import os
 
 
@@ -59,7 +57,7 @@ class SFTTrainer(BaseTrainer):
         )
 
 
-    def fine_tune(self, training_args: dict, save_to_disk: bool = False, output_dir: str = None, train_limit: int = None, test_limit: int = None, inplace: bool = False):
+    def fine_tune(self, training_args: dict, save_to_disk: bool = False, output_dir: str = None, limit_train: int = None, limit_test: int = None, inplace: bool = False):
         """
         Fine-tunes the model using the provided dataset. (Supervised Fine-Tuning **SFT** approach)
         #### Note:
@@ -101,7 +99,7 @@ class SFTTrainer(BaseTrainer):
                 
                 # in-memory training without disk I/O
                 args = TrainingArguments(
-                    output_dir=DEFAULT_OUTPUT_DIR,  # required but won't be used
+                    output_dir=DEFAULT_OUTPUT_DIR, # required but won't be used
                     per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
                     per_device_eval_batch_size=training_args.get("per_device_eval_batch_size", 4),
                     eval_strategy="epoch",
@@ -127,8 +125,8 @@ class SFTTrainer(BaseTrainer):
             return super().start_fine_tune(
                 training_args=args,
                 inplace=inplace,
-                train_limit=train_limit,
-                test_limit=test_limit,
+                limit_train=limit_train,
+                limit_test=limit_test,
             )
         else:
             return None
