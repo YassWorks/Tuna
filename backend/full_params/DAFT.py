@@ -56,11 +56,11 @@ class DAFTTrainer(BaseTrainer):
             limit (int, optional): Limit the number of training samples. Defaults to None.
             inplace (bool): If True, modifies the current instance in place. If False, returns a new instance. Defaults to False.
         Training Arguments:
-            - `per_device_train_batch_size`: Batch size per device during training.
-            - `num_train_epochs`: Number of epochs to train the model.
-            - `learning_rate`: Learning rate for the optimizer.
-            - `warmup_steps`: Number of warmup steps for learning rate scheduler.
-            - `weight_decay`: Weight decay for the optimizer.
+            - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
+            - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
+            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
+            - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
+            - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
         """
         
         try:
