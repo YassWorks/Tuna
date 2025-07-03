@@ -1,11 +1,12 @@
 from backend.tools.helpers.utils import Model, DataSet, random_hash
 from backend.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
-from transformers import TrainingArguments
+from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
 from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset as HFDataset
 from typing import Any
 import logging
 import torch
+import copy
 import os
 
 
@@ -14,8 +15,8 @@ class LoRATrainer(BaseTrainer):
     Fine-tunes a given model using the Low-Rank Adaptation (LoRA) approach on a given dataset.
     Outputs a new fine-tuned model that can be saved to a specified output directory, or just the new adapter layers separately.
     """
-    
-    
+
+
     def __init__(
         self,
         model: Model = None,
@@ -23,13 +24,11 @@ class LoRATrainer(BaseTrainer):
         train_dataset: DataSet | HFDataset | Any = None,
         train_dataset_name: str = None,
         train_dataset_split_name: str = "train",
-        lora_r: int = 8,
-        lora_alpha: int = 32,
-        lora_dropout: float = 0.05,
-        logger: logging.Logger = None
+        evaluation = False,
+        logger: logging.Logger = None,
     ):
         """
-        Initializes the LoRATrainer with either a Model instance or a model name, 
+        Initializes the LoRATrainer with either a Model instance or a model name,
         and either a DataSet instance or a dataset name.
         Args:
             model (Model, optional): An instance of Model. Defaults to None.
@@ -42,40 +41,27 @@ class LoRATrainer(BaseTrainer):
             lora_dropout (float, optional): LoRA dropout rate. Defaults to 0.05.
             logger (logging.Logger, optional): A logger instance for logging. Defaults to None.
         """
-        
+
         super().__init__(
             model=model,
             model_name=model_name,
             train_dataset=train_dataset,
             train_dataset_name=train_dataset_name,
             train_dataset_split_name=train_dataset_split_name,
-            logger=logger
+            evaluation=evaluation,
+            logger=logger,
         )
-        
-        # LoRA-specific parameter validation
-        if not (1 <= lora_r <= 128):
-            warn_msg = f"Unusual LoRA rank value: {lora_r}. It should be between 1 and 128. Setting it to 8."
-            if self.logger is not None:
-                self.logger.warning(warn_msg)
-            lora_r = 8
-        self.lora_r = lora_r
-        
-        if not (1 <= lora_alpha <= 256):
-            warn_msg = f"Unusual LoRA alpha value: {lora_alpha}. It should be between 1 and 256. Setting it to 32."
-            if self.logger is not None:
-                self.logger.warning(warn_msg)
-            lora_alpha = 32
-        self.lora_alpha = lora_alpha
-
-        if not (0.0 <= lora_dropout <= 0.5):
-            warn_msg = f"Unusual LoRA dropout value: {lora_dropout}. It should be between 0.0 and 0.5. Setting it to 0.05."
-            if self.logger is not None:
-                self.logger.warning(warn_msg)
-            lora_dropout = 0.05
-        self.lora_dropout = lora_dropout
 
 
-    def fine_tune(self, training_args: dict, save_to_disk: bool = False, output_dir: str = None, limit: int = None, inplace: bool = False):
+    def fine_tune(
+        self,
+        training_args: dict,
+        LoRA_args: dict = None,
+        save_to_disk: bool = False,
+        output_dir: str = None,
+        limit: int = None,
+        inplace: bool = False,
+    ):
         """
         Fine-tunes the model using the provided dataset. (Low-Rank Adaptation **LoRA** approach)
         Args:
@@ -90,21 +76,31 @@ class LoRATrainer(BaseTrainer):
             - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
+        LoRA Arguments:
+            - `r`: LoRA rank. Defaults to 8.
+            - `lora_alpha`: LoRA alpha. Defaults to 32.
+            - `lora_dropout`: LoRA dropout rate. Defaults to 0.05.
+            - `target_modules`: List of target modules for LoRA. Defaults to None.
+            - `bias`: Bias type for LoRA. Defaults to "none".
         """
-        
+
         try:
             if save_to_disk:
-                
+
                 if output_dir is None:
                     _hash = random_hash()
                     output_dir = DEFAULT_OUTPUT_DIR + f"/lora/lora_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
-                    self.logger.info(f"save_to_disk was set to 'True'. Output directory set to {output_dir}.")
-                
+                    self.logger.info(
+                        f"save_to_disk was set to 'True'. Output directory set to {output_dir}."
+                    )
+
                 args = TrainingArguments(
                     output_dir=output_dir,
-                    per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
+                    per_device_train_batch_size=training_args.get(
+                        "per_device_train_batch_size", 4
+                    ),
                     save_strategy="epoch",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
                     learning_rate=training_args.get("learning_rate", 5e-4),
@@ -115,11 +111,13 @@ class LoRATrainer(BaseTrainer):
                     report_to="none",
                 )
             else:
-                
+
                 # in-memory training without disk I/O
                 args = TrainingArguments(
-                    output_dir=DEFAULT_OUTPUT_DIR, # required but won't get used
-                    per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
+                    output_dir=DEFAULT_OUTPUT_DIR,  # required but won't get used
+                    per_device_train_batch_size=training_args.get(
+                        "per_device_train_batch_size", 4
+                    ),
                     save_strategy="no",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
                     learning_rate=training_args.get("learning_rate", 5e-4),
@@ -128,30 +126,46 @@ class LoRATrainer(BaseTrainer):
                     fp16=torch.cuda.is_available(),
                     report_to="none",
                 )
-            
+
             if self.logger is not None:
                 self.logger.info("Training arguments set up.")
-            
+
         except Exception as e:
             err_msg = f"Failed to set up training arguments: {str(e)}"
             if self.logger is not None:
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
         
-        # Apply LoRA configuration to model before training
-        return self._apply_lora_and_train(args, inplace, limit)
-    
-    
-    def _apply_lora_and_train(self, training_args: TrainingArguments, inplace: bool, limit: int):
+        try:
+            actual_lora_args = LoraConfig(
+                r=LoRA_args.get("r", 8),
+                lora_alpha=LoRA_args.get("lora_alpha", 32),
+                target_modules=LoRA_args.get("target_modules", None),
+                lora_dropout=LoRA_args.get("lora_dropout", 0.05),
+                bias=LoRA_args.get("bias", "none"),
+                task_type=TaskType.CAUSAL_LM,
+                fan_in_fan_out=True,
+            )
+        except Exception as e:
+            err_msg = f"Failed to create LoRA configuration: {str(e)}"
+            if self.logger is not None:
+                self.logger.error(err_msg, exc_info=True)
+            raise ValueError(err_msg)
+
+        return self._apply_lora_and_train(args, actual_lora_args, inplace, limit)
+
+
+    def _apply_lora_and_train(
+        self, training_args: TrainingArguments, LoRA_args: LoraConfig, inplace: bool, limit: int
+    ):
         """
         Applies LoRA configuration to the model and starts training.
         """
+
         base_model = self.model.model
 
-        # Clone model if not inplace
         if not inplace:
             try:
-                import copy
                 model = copy.deepcopy(base_model)
                 if self.logger is not None:
                     self.logger.info("Model cloned for non-inplace training.")
@@ -163,18 +177,8 @@ class LoRATrainer(BaseTrainer):
         else:
             model = base_model
 
-        # Apply LoRA configuration
         try:
-            peft_config = LoraConfig(
-                r=self.lora_r,
-                lora_alpha=self.lora_alpha,
-                target_modules=["c_attn"], # IMPORTANT: add this as a parameter later
-                lora_dropout=self.lora_dropout,
-                bias="none",
-                task_type=TaskType.CAUSAL_LM,
-                fan_in_fan_out=True
-            )
-            peft_model = get_peft_model(model, peft_config)
+            peft_model = get_peft_model(model, LoRA_args)
             if self.logger is not None:
                 self.logger.info("Model wrapped with LoRA configuration.")
         except Exception as e:
@@ -183,13 +187,12 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        # Tokenize dataset
         tokenized_train = self.tokenize_dataset(self.train_dataset, limit)
-        
-        # Create data collator
+
         try:
-            from transformers import DataCollatorForLanguageModeling
-            data_collator = DataCollatorForLanguageModeling(tokenizer=self.model.tokenizer, mlm=False)
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer=self.model.tokenizer, mlm=False
+            )
             if self.logger is not None:
                 self.logger.info("Data collator created.")
         except Exception as e:
@@ -198,9 +201,7 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        # Create trainer
         try:
-            from transformers import Trainer
             trainer = Trainer(
                 model=peft_model,
                 args=training_args,
@@ -215,7 +216,6 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        # Start training
         try:
             if self.logger is not None:
                 self.logger.info("Starting LoRA training...")
@@ -228,17 +228,19 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        # Merge and unload LoRA layers
         try:
-            merged_model = peft_model.merge_and_unload()
-            if self.logger is not None:
-                self.logger.info("LoRA layers merged and unloaded.")
-            
             if inplace:
+
+                merged_model = peft_model.merge_and_unload()
+                if self.logger is not None:
+                    self.logger.info("LoRA layers merged and unloaded.")
+
                 self.model.model = merged_model
                 if self.logger is not None:
-                    self.logger.info("Model updated in place with LoRA fine-tuned weights.")
-            
+                    self.logger.info(
+                        "Model updated in place with LoRA fine-tuned weights."
+                    )
+
         except Exception as e:
             err_msg = f"Failed to merge and unload LoRA layers: {str(e)}"
             if self.logger is not None:

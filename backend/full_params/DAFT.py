@@ -13,8 +13,8 @@ class DAFTTrainer(BaseTrainer):
     Fine-tunes a given model using the Domain-Adaptive Fine-Tuning (DAFT) approach on a given dataset.
     Outputs a new fine-tuned model that can be saved to a specified output directory.
     """
-    
-    
+
+
     def __init__(
         self,
         text_gen: Model = None,
@@ -22,10 +22,10 @@ class DAFTTrainer(BaseTrainer):
         dataset: DataSet | HFDataset | Any = None,
         dataset_name: str = None,
         dataset_split_name: str = "train",
-        logger: logging.Logger = None
+        logger: logging.Logger = None,
     ):
         """
-        Initializes the DAFTTrainer with either a TextGenerator instance or a model name, 
+        Initializes the DAFTTrainer with either a TextGenerator instance or a model name,
         and either a DataSet instance or a dataset name.
         Args:
             text_gen (TextGenerator, optional): An instance of TextGenerator. Defaults to None.
@@ -35,18 +35,26 @@ class DAFTTrainer(BaseTrainer):
             dataset_split (str, optional): The split of the dataset to use. Defaults to "train".
             logger (logging.Logger, optional): A logger instance for logging. Defaults to None.
         """
-        
+
         super().__init__(
             model=text_gen,
             model_name=model_name,
             train_dataset=dataset,
             train_dataset_name=dataset_name,
             train_dataset_split_name=dataset_split_name,
-            logger=logger
+            logger=logger,
         )
 
 
-    def fine_tune(self, training_args: dict, save_to_disk: bool = False, output_dir: str = None, limit: int = None, inplace: bool = False):
+    def fine_tune(
+        self,
+        training_args: dict,
+        save_to_disk: bool = False,
+        output_dir: str = None,
+        columns: list[str] = None,
+        limit: int = None,
+        inplace: bool = False,
+    ):
         """
         Fine-tunes the model using the provided dataset. (Domain-Adaptive Fine-Tuning **DAFT** approach)
         Args:
@@ -61,21 +69,25 @@ class DAFTTrainer(BaseTrainer):
             - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
+        Returns:
+            Model: The wrapper for the model (fine-tuned) + tokenizer instance regardless of `inplace`.
         """
-        
+
         try:
             if save_to_disk:
-                
+
                 if output_dir is None:
                     _hash = random_hash()
                     output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/daft_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(f"Saving training outputs to disk at {output_dir}")
-                
+
                 args = TrainingArguments(
                     output_dir=output_dir,
-                    per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
+                    per_device_train_batch_size=training_args.get(
+                        "per_device_train_batch_size", 4
+                    ),
                     save_strategy="epoch",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
                     learning_rate=training_args.get("learning_rate", 5e-5),
@@ -86,10 +98,12 @@ class DAFTTrainer(BaseTrainer):
                     report_to="none",
                 )
             else:
-                
+
                 args = TrainingArguments(
-                    output_dir=DEFAULT_OUTPUT_DIR, # required but won't get used
-                    per_device_train_batch_size=training_args.get("per_device_train_batch_size", 4),
+                    output_dir=DEFAULT_OUTPUT_DIR,  # required but won't get used
+                    per_device_train_batch_size=training_args.get(
+                        "per_device_train_batch_size", 4
+                    ),
                     save_strategy="no",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
                     learning_rate=training_args.get("learning_rate", 5e-5),
@@ -98,18 +112,19 @@ class DAFTTrainer(BaseTrainer):
                     fp16=torch.cuda.is_available(),
                     report_to="none",
                 )
-            
+
             if self.logger is not None:
                 self.logger.info("TrainingArguments configured.")
-            
+
         except Exception as e:
             err_msg = f"Failed to configure training arguments: {str(e)}"
             if self.logger is not None:
                 self.logger.error(err_msg)
             raise ValueError(err_msg)
-        
+
         return self.start_fine_tune(
             training_args=args,
             inplace=inplace,
+            columns_train=columns,
             limit_train=limit,
         )
