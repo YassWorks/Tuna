@@ -38,9 +38,7 @@ print(new_text_gen)
 print("VS".center(50, "#"))
 print(text_gen)
 
-# error does NOT happen here
 print(text_gen.generate("What is the integral of x^2?"))
-# and error happens here
 print(new_text_gen.generate("What is the integral of x^2?"))
 
 trainer.save_model()
