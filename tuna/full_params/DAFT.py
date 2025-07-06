@@ -17,31 +17,31 @@ class DAFTTrainer(BaseTrainer):
 
     def __init__(
         self,
-        text_gen: Model = None,
+        model: Model = None,
         model_name: str = None,
-        dataset: DataSet | HFDataset | Any = None,
-        dataset_name: str = None,
-        dataset_split_name: str = "train",
+        train_dataset: DataSet | HFDataset | Any = None,
+        train_dataset_name: str = None,
+        train_dataset_split_name: str = "train",
         logger: logging.Logger = None,
     ):
         """
-        Initializes the DAFTTrainer with either a TextGenerator instance or a model name,
+        Initializes the DAFTTrainer with either a Model instance or a model name,
         and either a DataSet instance or a dataset name.
         Args:
-            text_gen (TextGenerator, optional): An instance of TextGenerator. Defaults to None.
+            model (Model, optional): An instance of Model. Defaults to None.
             model_name (str, optional): The name of the model to use. Defaults to None.
-            dataset (DataSet, optional): An instance of DataSet. Defaults to None.
-            dataset_name (str, optional): The name of the dataset to use. Defaults to None.
-            dataset_split (str, optional): The split of the dataset to use. Defaults to "train".
+            train_dataset (DataSet, optional): An instance of DataSet. Defaults to None.
+            train_dataset_name (str, optional): The name of the dataset to use. Defaults to None.
+            train_dataset_split_name (str, optional): The split of the dataset to use. Defaults to "train".
             logger (logging.Logger, optional): A logger instance for logging. Defaults to None.
         """
 
         super().__init__(
-            model=text_gen,
+            model=model,
             model_name=model_name,
-            train_dataset=dataset,
-            train_dataset_name=dataset_name,
-            train_dataset_split_name=dataset_split_name,
+            train_dataset=train_dataset,
+            train_dataset_name=train_dataset_name,
+            train_dataset_split_name=train_dataset_split_name,
             logger=logger,
         )
 
@@ -51,8 +51,8 @@ class DAFTTrainer(BaseTrainer):
         training_args: dict,
         save_checkpoints: bool = False,
         output_dir: str = None,
-        columns: list[str] = None,
-        limit: int = None,
+        columns_train: list[str] = None,
+        limit_train: int = None,
     ):
         """
         Fine-tunes the model using the provided dataset. (Domain-Adaptive Fine-Tuning **DAFT** approach)
@@ -60,11 +60,12 @@ class DAFTTrainer(BaseTrainer):
             training_args (dict): A dictionary containing training arguments such as batch size, learning rate, etc.
             save_checkpoints (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
-            limit (int, optional): Limit the number of training samples. Defaults to None.
+            columns_train (list[str], optional): Columns to use for training. Defaults to None.
+            limit_train (int, optional): Limit the number of training samples. Defaults to None.
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
             - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
-            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
+            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-5.
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
         Returns:
@@ -79,7 +80,9 @@ class DAFTTrainer(BaseTrainer):
                     output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/daft_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
-                    self.logger.info(f"Saving training outputs to disk at {output_dir}")
+                    self.logger.info(
+                        f"save_checkpoints was set to 'True'. Output directory set to {output_dir}."
+                    )
 
                 args = TrainingArguments(
                     output_dir=output_dir,
@@ -96,9 +99,9 @@ class DAFTTrainer(BaseTrainer):
                     report_to="none",
                 )
             else:
-
+                # in-memory training without disk I/O
                 args = TrainingArguments(
-                    output_dir=DEFAULT_OUTPUT_DIR,  # required but won't get used
+                    output_dir=DEFAULT_OUTPUT_DIR,  # required but won't be used
                     per_device_train_batch_size=training_args.get(
                         "per_device_train_batch_size", 4
                     ),
@@ -112,16 +115,16 @@ class DAFTTrainer(BaseTrainer):
                 )
 
             if self.logger is not None:
-                self.logger.info("TrainingArguments configured.")
+                self.logger.info("Training arguments set up.")
 
         except Exception as e:
-            err_msg = f"Failed to configure training arguments: {str(e)}"
+            err_msg = f"Failed to set up training arguments: {str(e)}"
             if self.logger is not None:
-                self.logger.error(err_msg)
+                self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
         return super().start_fine_tune(
             training_args=args,
-            columns_train=columns,
-            limit_train=limit,
+            columns_train=columns_train,
+            limit_train=limit_train,
         )

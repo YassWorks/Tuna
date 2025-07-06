@@ -15,10 +15,8 @@ class DataSet:
 
     def load(self) -> Dataset:
         try:
-            dataset: DatasetDict = load_dataset(name=self.name, split=self.split, **self.kwargs)
-            if self.split not in dataset:
-                raise ValueError(f"Split '{self.split}' not found in dataset '{self.name}'. Available: {list(dataset.keys())}")
-            return dataset[self.split]
+            dataset = load_dataset(name=self.name, split=self.split, **self.kwargs)
+            return dataset
         except Exception as e:
             raise ValueError(f"Failed to load dataset '{self.name}' with split '{self.split}': {e}")
         
@@ -33,7 +31,7 @@ class Model:
     """
     Wrapper for Hugging Face's AutoModelForCausalLM and AutoTokenizer.
     """
-    def __init__(self, model = None, tokenizer = None, model_name: str = None, tokenizer_kwargs=None, model_kwargs=None):
+    def __init__(self, model=None, tokenizer=None, model_name: str = None, tokenizer_kwargs=None, model_kwargs=None):
         try:
             if model:
                 self.model = model
@@ -79,7 +77,7 @@ class Model:
         return generated_text.strip()
     
     def __str__(self):
-        return " Model architecture ".center(100, '-') + '\n' + str(self.model) + '\n' + "-"*100
+        return " Model architecture ".center(100, '-') + '\n' + str(self.model) + '\n' + "-" * 100
     
     def __repr__(self):
         return self.__str__()

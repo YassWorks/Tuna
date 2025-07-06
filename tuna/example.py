@@ -30,7 +30,7 @@ lora_args = {
 
 new_model = lora_trainer.fine_tune(
     training_args=training_args,
-    LoRA_args=lora_args,
+    lora_args=lora_args,
     limit=10
 )
 

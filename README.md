@@ -66,7 +66,7 @@ dataset = load_dataset("HuggingFaceH4/MATH-500", split="test")
 lora_trainer = LoRATrainer(model=model, train_dataset=dataset)
 new_model = lora_trainer.fine_tune(
     training_args={"per_device_train_batch_size": 2, "num_train_epochs": 1},
-    LoRA_args={"r": 8, "lora_alpha": 32, "target_modules": ["c_attn"]},
+    lora_args={"r": 8, "lora_alpha": 32, "target_modules": ["c_attn"]},
     limit=10
 )
 # That's it. Seriously.
@@ -111,7 +111,7 @@ fine_tuned_model = trainer.fine_tune(
         "num_train_epochs": 3,
         "learning_rate": 1e-4,
     },
-    LoRA_args={
+    lora_args={
         "r": 16,
         "lora_alpha": 32,
         "lora_dropout": 0.1,

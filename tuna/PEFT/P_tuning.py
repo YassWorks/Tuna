@@ -83,7 +83,7 @@ class PTTrainer(BaseTrainer):
             if save_checkpoints:
                 if output_dir is None:
                     _hash = random_hash()
-                    output_dir = DEFAULT_OUTPUT_DIR + f"/ptuning/ptuning_session_{_hash}"
+                    output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/ptuning_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(
@@ -135,7 +135,7 @@ class PTTrainer(BaseTrainer):
                 num_virtual_tokens=num_virtual_tokens if num_virtual_tokens is not None else 20,
             )
         except Exception as e:
-            err_msg = f"Failed to create LoRA configuration: {str(e)}"
+            err_msg = f"Failed to create P-tuning configuration: {str(e)}"
             if self.logger is not None:
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
@@ -143,19 +143,19 @@ class PTTrainer(BaseTrainer):
         try:
             peft_model = get_peft_model(self.model.model, actual_pt_args)
             if self.logger is not None:
-                self.logger.info("Model wrapped with LoRA configuration.")
+                self.logger.info("Model wrapped with P-tuning configuration.")
         except Exception as e:
-            err_msg = f"Failed to wrap model with LoRA configuration: {str(e)}"
+            err_msg = f"Failed to wrap model with P-tuning configuration: {str(e)}"
             if self.logger is not None:
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
         
         self.model.model = peft_model
         
-        fine_tuned_peft_Model = super().start_fine_tune(
+        fine_tuned_peft_model = super().start_fine_tune(
             training_args=args,
             columns_train=columns_train,
             limit_train=limit,
         )
         
-        return fine_tuned_peft_Model
+        return fine_tuned_peft_model

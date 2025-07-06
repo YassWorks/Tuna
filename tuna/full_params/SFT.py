@@ -17,7 +17,7 @@ class SFTTrainer(BaseTrainer):
 
     def __init__(
         self,
-        text_gen: Model = None,
+        model: Model = None,
         model_name: str = None,
         train_dataset: DataSet | HFDataset | Any = None,
         train_dataset_name: str = None,
@@ -28,10 +28,10 @@ class SFTTrainer(BaseTrainer):
         logger: logging.Logger = None,
     ):
         """
-        Initializes the SFTTrainer with either a TextGenerator instance or a model name,
+        Initializes the SFTTrainer with either a Model instance or a model name,
         and either a DataSet instance or a dataset name.
         Args:
-            text_gen (TextGenerator, optional): An instance of TextGenerator. Defaults to None.
+            model (Model, optional): An instance of Model. Defaults to None.
             model_name (str, optional): The name of the model to use. Defaults to None.
             train_dataset (DataSet, optional): An instance of DataSet for training. Defaults to None.
             train_dataset_name (str, optional): The name of the training dataset to use. Defaults to None.
@@ -44,7 +44,7 @@ class SFTTrainer(BaseTrainer):
 
         # Initialize training dataset using BaseTrainer
         super().__init__(
-            model=text_gen,
+            model=model,
             model_name=model_name,
             train_dataset=train_dataset,
             train_dataset_name=train_dataset_name,
@@ -73,13 +73,15 @@ class SFTTrainer(BaseTrainer):
             training_args (dict): A dictionary containing training arguments such as batch size, learning rate, etc.
             save_checkpoints (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
-            train_limit (int, optional): Limit the number of training samples. Defaults to None.
-            test_limit (int, optional): Limit the number of testing samples. Defaults to None.
+            columns_train (list[str], optional): Columns to use for training. Defaults to None.
+            columns_test (list[str], optional): Columns to use for testing. Defaults to None.
+            limit_train (int, optional): Limit the number of training samples. Defaults to None.
+            limit_test (int, optional): Limit the number of testing samples. Defaults to None.
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
             - `per_device_eval_batch_size`: Batch size per device during evaluation. Defaults to 4.
             - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
-            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
+            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-5.
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
         Returns:
@@ -91,7 +93,7 @@ class SFTTrainer(BaseTrainer):
 
                 if output_dir is None:
                     _hash = random_hash()
-                    output_dir = DEFAULT_OUTPUT_DIR + f"/sft/sft_session_{_hash}"
+                    output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/sft_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(

@@ -23,7 +23,7 @@ class LoRATrainer(BaseTrainer):
         train_dataset: DataSet | HFDataset | Any = None,
         train_dataset_name: str = None,
         train_dataset_split_name: str = "train",
-        evaluation = False,
+        evaluation: bool = False,
         logger: logging.Logger = None,
     ):
         """
@@ -35,9 +35,7 @@ class LoRATrainer(BaseTrainer):
             train_dataset (DataSet, optional): An instance of DataSet. Defaults to None.
             train_dataset_name (str, optional): The name of the dataset to use. Defaults to None.
             train_dataset_split_name (str, optional): The split of the dataset to use. Defaults to "train".
-            lora_r (int, optional): LoRA rank. Defaults to 8.
-            lora_alpha (int, optional): LoRA alpha. Defaults to 32.
-            lora_dropout (float, optional): LoRA dropout rate. Defaults to 0.05.
+            evaluation (bool, optional): Whether to enable evaluation during training. Defaults to False.
             logger (logging.Logger, optional): A logger instance for logging. Defaults to None.
         """
 
@@ -55,7 +53,7 @@ class LoRATrainer(BaseTrainer):
     def fine_tune(
         self,
         training_args: dict = None,
-        LoRA_args: dict = None,
+        lora_args: dict = None,
         columns_train: list[str] = None,
         save_checkpoints: bool = False,
         output_dir: str = None,
@@ -71,7 +69,7 @@ class LoRATrainer(BaseTrainer):
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
             - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
-            - `learning_rate`: Learning rate for the optimizer. Defaults to 5e-4.
+            - `learning_rate`: Learning rate for the optimizer. Defaults to 1e-4.
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
         LoRA Arguments:
@@ -87,7 +85,7 @@ class LoRATrainer(BaseTrainer):
 
                 if output_dir is None:
                     _hash = random_hash()
-                    output_dir = DEFAULT_OUTPUT_DIR + f"/lora/lora_session_{_hash}"
+                    output_dir = DEFAULT_OUTPUT_DIR + f"/sessions/lora_session_{_hash}"
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(
@@ -101,7 +99,7 @@ class LoRATrainer(BaseTrainer):
                     ),
                     save_strategy="epoch",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
-                    learning_rate=training_args.get("learning_rate", 5e-4),
+                    learning_rate=training_args.get("learning_rate", 1e-4),
                     warmup_steps=training_args.get("warmup_steps", 100),
                     weight_decay=training_args.get("weight_decay", 0.01),
                     fp16=torch.cuda.is_available(),
@@ -118,7 +116,7 @@ class LoRATrainer(BaseTrainer):
                     ),
                     save_strategy="no",
                     num_train_epochs=training_args.get("num_train_epochs", 3),
-                    learning_rate=training_args.get("learning_rate", 5e-4),
+                    learning_rate=training_args.get("learning_rate", 1e-4),
                     warmup_steps=training_args.get("warmup_steps", 100),
                     weight_decay=training_args.get("weight_decay", 0.01),
                     fp16=torch.cuda.is_available(),
@@ -136,11 +134,11 @@ class LoRATrainer(BaseTrainer):
         
         try:
             actual_lora_args = LoraConfig(
-                r=LoRA_args.get("r", 8),
-                lora_alpha=LoRA_args.get("lora_alpha", 32),
-                target_modules=LoRA_args.get("target_modules", None),
-                lora_dropout=LoRA_args.get("lora_dropout", 0.05),
-                bias=LoRA_args.get("bias", "none"),
+                r=lora_args.get("r", 8),
+                lora_alpha=lora_args.get("lora_alpha", 32),
+                target_modules=lora_args.get("target_modules", None),
+                lora_dropout=lora_args.get("lora_dropout", 0.05),
+                bias=lora_args.get("bias", "none"),
                 task_type=TaskType.CAUSAL_LM,
                 fan_in_fan_out=True,
             )
@@ -162,15 +160,15 @@ class LoRATrainer(BaseTrainer):
         
         self.model.model = peft_model
         
-        fine_tuned_peft_Model = super().start_fine_tune(
+        fine_tuned_peft_model = super().start_fine_tune(
             training_args=args,
             columns_train=columns_train,
             limit_train=limit,
         )
         
         try:
-            fine_tuned_peft_Model.model.merge_and_unload()
-            fine_tuned_peft_Model.model = fine_tuned_peft_Model.model.base_model.model # get rid of peft wrapper
+            fine_tuned_peft_model.model.merge_and_unload()
+            fine_tuned_peft_model.model = fine_tuned_peft_model.model.base_model.model  # get rid of peft wrapper
 
         except Exception as e:
             err_msg = f"Failed to merge and unload LoRA layers: {str(e)}"
@@ -178,6 +176,6 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
         
-        self.model = fine_tuned_peft_Model
+        self.model = fine_tuned_peft_model
         
-        return fine_tuned_peft_Model
+        return fine_tuned_peft_model
