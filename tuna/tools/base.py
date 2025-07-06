@@ -1,5 +1,5 @@
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
-from backend.tools.helpers.utils import Model, DataSet, random_hash
+from tuna.tools.helpers.utils import Model, DataSet, random_hash
 from transformers import AutoModelForCausalLM
 from datasets import Dataset as HFDataset
 from typing import Any
@@ -128,9 +128,9 @@ class BaseTrainer:
         Preprocess function for the dataset.
         """
 
-        if keys:
+        if keys is not None:
             full_text = " ".join(
-                [str(value) for key, value in example.items() if (key in keys)]
+                [str(value) for key, value in example.items() if str(key) in keys]
             )
         else:
             full_text = " ".join([str(value) for value in example.values()])
@@ -284,12 +284,17 @@ class BaseTrainer:
                 self.logger.error(err_msg)
             raise ValueError(err_msg)
 
+        fine_tuned_model = Model(
+            model=model,
+            tokenizer=self.model.tokenizer,
+        )
         if inplace:
-            self.model.model = model
+            self.model = fine_tuned_model
             if self.logger is not None:
                 self.logger.info("Model updated inplace.")
+        
+        return fine_tuned_model
 
-        return self.model
 
 
     def tokenize_dataset(

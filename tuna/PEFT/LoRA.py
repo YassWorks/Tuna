@@ -1,7 +1,7 @@
-from backend.tools.helpers.utils import Model, DataSet, random_hash
-from backend.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
+from tuna.tools.helpers.utils import Model, DataSet, random_hash
+from tuna.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
 from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
-from peft import LoraConfig, get_peft_model, TaskType
+from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 from datasets import Dataset as HFDataset
 from typing import Any
 import logging
@@ -57,6 +57,7 @@ class LoRATrainer(BaseTrainer):
         self,
         training_args: dict,
         LoRA_args: dict = None,
+        columns_train: list[str] = None,
         save_to_disk: bool = False,
         output_dir: str = None,
         limit: int = None,
@@ -83,7 +84,7 @@ class LoRATrainer(BaseTrainer):
             - `target_modules`: List of target modules for LoRA. Defaults to None.
             - `bias`: Bias type for LoRA. Defaults to "none".
         """
-
+        
         try:
             if save_to_disk:
 
@@ -152,33 +153,8 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        return self._apply_lora_and_train(args, actual_lora_args, inplace, limit)
-
-
-    def _apply_lora_and_train(
-        self, training_args: TrainingArguments, LoRA_args: LoraConfig, inplace: bool, limit: int
-    ):
-        """
-        Applies LoRA configuration to the model and starts training.
-        """
-
-        base_model = self.model.model
-
-        if not inplace:
-            try:
-                model = copy.deepcopy(base_model)
-                if self.logger is not None:
-                    self.logger.info("Model cloned for non-inplace training.")
-            except Exception as e:
-                err_msg = f"Failed to clone model: {str(e)}"
-                if self.logger is not None:
-                    self.logger.error(err_msg, exc_info=True)
-                raise ValueError(err_msg)
-        else:
-            model = base_model
-
         try:
-            peft_model = get_peft_model(model, LoRA_args)
+            peft_model: PeftModel = get_peft_model(self.model.model, actual_lora_args)
             if self.logger is not None:
                 self.logger.info("Model wrapped with LoRA configuration.")
         except Exception as e:
@@ -186,60 +162,23 @@ class LoRATrainer(BaseTrainer):
             if self.logger is not None:
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
-
-        tokenized_train = self.tokenize_dataset(self.train_dataset, limit)
-
-        try:
-            data_collator = DataCollatorForLanguageModeling(
-                tokenizer=self.model.tokenizer, mlm=False
-            )
-            if self.logger is not None:
-                self.logger.info("Data collator created.")
-        except Exception as e:
-            err_msg = f"Failed to create data collator: {str(e)}"
-            if self.logger is not None:
-                self.logger.error(err_msg, exc_info=True)
-            raise ValueError(err_msg)
-
-        try:
-            trainer = Trainer(
-                model=peft_model,
-                args=training_args,
-                train_dataset=tokenized_train,
-                data_collator=data_collator,
-            )
-            if self.logger is not None:
-                self.logger.info("Trainer initialized.")
-        except Exception as e:
-            err_msg = f"Failed to initialize Trainer: {str(e)}"
-            if self.logger is not None:
-                self.logger.error(err_msg, exc_info=True)
-            raise ValueError(err_msg)
+        
+        if not inplace:
+            backup_model = copy.deepcopy(self.model.model)
+            
+        self.model.model = peft_model
+        
+        fine_tuned_peft_Model = super().start_fine_tune(
+            training_args=args,
+            inplace=inplace,
+            columns_train=columns_train,
+            limit_train=limit,
+        )
+        
+        self.model.model = backup_model
 
         try:
-            if self.logger is not None:
-                self.logger.info("Starting LoRA training...")
-            trainer.train()
-            if self.logger is not None:
-                self.logger.info("LoRA training completed.")
-        except Exception as e:
-            err_msg = f"LoRA training failed: {str(e)}"
-            if self.logger is not None:
-                self.logger.error(err_msg, exc_info=True)
-            raise ValueError(err_msg)
-
-        try:
-            if inplace:
-
-                merged_model = peft_model.merge_and_unload()
-                if self.logger is not None:
-                    self.logger.info("LoRA layers merged and unloaded.")
-
-                self.model.model = merged_model
-                if self.logger is not None:
-                    self.logger.info(
-                        "Model updated in place with LoRA fine-tuned weights."
-                    )
+            fine_tuned_peft_Model.model.merge_and_unload()
 
         except Exception as e:
             err_msg = f"Failed to merge and unload LoRA layers: {str(e)}"
@@ -247,4 +186,7 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
 
-        return self.model
+        if inplace:
+           self.model = fine_tuned_peft_Model
+        
+        return fine_tuned_peft_Model

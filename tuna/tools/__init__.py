@@ -1,5 +1,5 @@
-from backend.tools.helpers import *
-from backend.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
+from tuna.tools.helpers import *
+from tuna.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
 
 __all__ = [
     "Model",
