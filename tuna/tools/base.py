@@ -1,10 +1,8 @@
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
 from tuna.tools.helpers.utils import Model, DataSet, random_hash
-from transformers import AutoModelForCausalLM
 from datasets import Dataset as HFDataset
 from typing import Any
 import logging
-import copy
 import os
 
 
@@ -197,7 +195,6 @@ class BaseTrainer:
     def start_fine_tune(
         self,
         training_args: TrainingArguments = None,
-        inplace: bool = False,
         columns_train: list[str] = None,
         columns_test: list[str] = None,
         limit_train: int = None,
@@ -205,37 +202,13 @@ class BaseTrainer:
     ):
         """
         Fine-tunes the model using the provided dataset.
-
-        Note:
-            If inplace=False, a new model instance is created and returned (the original model remains untouched).
-            If inplace=True, the self.text_gen.model is updated with fine-tuned weights.
-
         Args:
             save_to_disk (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
             limit (int, optional): Limit the number of training samples. Defaults to None.
-            inplace (bool, optional): Whether to fine-tune the model in-place or return a separate instance. Defaults to False.
         Returns:
-            Model: The wrapper for the model (fine-tuned) + tokenizer instance regardless of `inplcae`.
+            Model: The wrapper for the model.
         """
-
-        base_model = self.model.model
-
-        # Clone model if not inplace
-        if not inplace:
-            try:
-                model = copy.deepcopy(base_model)
-                if self.logger is not None:
-                    self.logger.info(
-                        "Cloned model for isolated fine-tuning (inplace=False)."
-                    )
-            except Exception as e:
-                err_msg = f"Failed to clone model for non-inplace fine-tuning: {str(e)}"
-                if self.logger is not None:
-                    self.logger.error(err_msg, exc_info=True)
-                raise ValueError(err_msg)
-        else:
-            model = base_model
 
         try:
             data_collator = DataCollatorForLanguageModeling(
@@ -256,7 +229,7 @@ class BaseTrainer:
 
         try:
             trainer = Trainer(
-                model=model,
+                model=self.model.model,
                 args=training_args,
                 train_dataset=tokenized_train,  # always present
                 eval_dataset=(
@@ -283,18 +256,8 @@ class BaseTrainer:
             if self.logger is not None:
                 self.logger.error(err_msg)
             raise ValueError(err_msg)
-
-        fine_tuned_model = Model(
-            model=model,
-            tokenizer=self.model.tokenizer,
-        )
-        if inplace:
-            self.model = fine_tuned_model
-            if self.logger is not None:
-                self.logger.info("Model updated inplace.")
         
-        return fine_tuned_model
-
+        return self.model
 
 
     def tokenize_dataset(

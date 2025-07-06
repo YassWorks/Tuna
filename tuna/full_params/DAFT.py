@@ -49,20 +49,18 @@ class DAFTTrainer(BaseTrainer):
     def fine_tune(
         self,
         training_args: dict,
-        save_to_disk: bool = False,
+        save_checkpoints: bool = False,
         output_dir: str = None,
         columns: list[str] = None,
         limit: int = None,
-        inplace: bool = False,
     ):
         """
         Fine-tunes the model using the provided dataset. (Domain-Adaptive Fine-Tuning **DAFT** approach)
         Args:
             training_args (dict): A dictionary containing training arguments such as batch size, learning rate, etc.
-            save_to_disk (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
+            save_checkpoints (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
             limit (int, optional): Limit the number of training samples. Defaults to None.
-            inplace (bool): If True, modifies the current instance in place. If False, returns a new instance. Defaults to False.
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
             - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
@@ -70,11 +68,11 @@ class DAFTTrainer(BaseTrainer):
             - `warmup_steps`: Number of warmup steps for learning rate scheduler. Defaults to 100.
             - `weight_decay`: Weight decay for the optimizer. Defaults to 0.01.
         Returns:
-            Model: The wrapper for the model (fine-tuned) + tokenizer instance regardless of `inplace`.
+            Model: The wrapper for the model.
         """
 
         try:
-            if save_to_disk:
+            if save_checkpoints:
 
                 if output_dir is None:
                     _hash = random_hash()
@@ -122,9 +120,8 @@ class DAFTTrainer(BaseTrainer):
                 self.logger.error(err_msg)
             raise ValueError(err_msg)
 
-        return self.start_fine_tune(
+        return super().start_fine_tune(
             training_args=args,
-            inplace=inplace,
             columns_train=columns,
             limit_train=limit,
         )

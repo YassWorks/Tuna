@@ -1,19 +1,18 @@
 from tuna.tools.helpers.utils import Model, DataSet, random_hash
 from tuna.tools.base import BaseTrainer, DEFAULT_OUTPUT_DIR
-from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
-from peft import LoraConfig, get_peft_model, TaskType, PeftModel
+from transformers import TrainingArguments
+from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset as HFDataset
 from typing import Any
 import logging
 import torch
-import copy
 import os
 
 
 class LoRATrainer(BaseTrainer):
     """
     Fine-tunes a given model using the Low-Rank Adaptation (LoRA) approach on a given dataset.
-    Outputs a new fine-tuned model that can be saved to a specified output directory, or just the new adapter layers separately.
+    Outputs a new fine-tuned model that can be saved to a specified output directory.
     """
 
 
@@ -55,22 +54,20 @@ class LoRATrainer(BaseTrainer):
 
     def fine_tune(
         self,
-        training_args: dict,
+        training_args: dict = None,
         LoRA_args: dict = None,
         columns_train: list[str] = None,
-        save_to_disk: bool = False,
+        save_checkpoints: bool = False,
         output_dir: str = None,
         limit: int = None,
-        inplace: bool = False,
     ):
         """
         Fine-tunes the model using the provided dataset. (Low-Rank Adaptation **LoRA** approach)
         Args:
             training_args (dict): A dictionary containing training arguments such as batch size, learning rate, etc.
-            save_to_disk (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
+            save_checkpoints (bool): Whether to save checkpoints and logs to disk during training. Defaults to False.
             output_dir (str, optional): The directory where the model and tokenizer will be saved. Defaults to None.
             limit (int, optional): Limit the number of training samples. Defaults to None.
-            inplace (bool): If True, modifies the current instance in place. If False, returns a new instance. Defaults to False.
         Training Arguments:
             - `per_device_train_batch_size`: Batch size per device during training. Defaults to 4.
             - `num_train_epochs`: Number of epochs to train the model. Defaults to 3.
@@ -86,7 +83,7 @@ class LoRATrainer(BaseTrainer):
         """
         
         try:
-            if save_to_disk:
+            if save_checkpoints:
 
                 if output_dir is None:
                     _hash = random_hash()
@@ -94,7 +91,7 @@ class LoRATrainer(BaseTrainer):
                     os.makedirs(output_dir, exist_ok=True)
                 if self.logger is not None:
                     self.logger.info(
-                        f"save_to_disk was set to 'True'. Output directory set to {output_dir}."
+                        f"save_checkpoints was set to 'True'. Output directory set to {output_dir}."
                     )
 
                 args = TrainingArguments(
@@ -154,7 +151,7 @@ class LoRATrainer(BaseTrainer):
             raise ValueError(err_msg)
 
         try:
-            peft_model: PeftModel = get_peft_model(self.model.model, actual_lora_args)
+            peft_model = get_peft_model(self.model.model, actual_lora_args)
             if self.logger is not None:
                 self.logger.info("Model wrapped with LoRA configuration.")
         except Exception as e:
@@ -163,30 +160,24 @@ class LoRATrainer(BaseTrainer):
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
         
-        if not inplace:
-            backup_model = copy.deepcopy(self.model.model)
-            
         self.model.model = peft_model
         
         fine_tuned_peft_Model = super().start_fine_tune(
             training_args=args,
-            inplace=inplace,
             columns_train=columns_train,
             limit_train=limit,
         )
         
-        self.model.model = backup_model
-
         try:
             fine_tuned_peft_Model.model.merge_and_unload()
+            fine_tuned_peft_Model.model = fine_tuned_peft_Model.model.base_model.model # get rid of peft wrapper
 
         except Exception as e:
             err_msg = f"Failed to merge and unload LoRA layers: {str(e)}"
             if self.logger is not None:
                 self.logger.error(err_msg, exc_info=True)
             raise ValueError(err_msg)
-
-        if inplace:
-           self.model = fine_tuned_peft_Model
+        
+        self.model = fine_tuned_peft_Model
         
         return fine_tuned_peft_Model
